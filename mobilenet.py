@@ -1,16 +1,20 @@
 import cv2
 from datetime import datetime
 from web import *
+import os
+
+global opt
+opt = 1
 
 def init_detection():
     global classNames
     classNames = []
-    classFile = '/home/pi/IoT_Counter/coco.names' # you should change the path of this file 
+    classFile = '/home/pi/IoT_Counter/coco.names' # (!) path (!)
     with open(classFile, 'rt') as f:
         classNames = f.read().rstrip('\n').split('\n')
 
-    configPath = '/home/pi/IoT_Counter/ssd_mobilenet_v3_large_coco_2020_01_14.pbtxt' # you should change the path of this file 
-    weightsPath = '/home/pi/IoT_Counter/frozen_inference_graph.pb' # you should change the path of this file 
+    configPath = '/home/pi/IoT_Counter/ssd_mobilenet_v3_large_coco_2020_01_14.pbtxt' # (!) path (!) 
+    weightsPath = '/home/pi/IoT_Counter/frozen_inference_graph.pb' # (!) path (!)
 
     global net
     global confidence
@@ -29,10 +33,9 @@ def init_detection():
     
 def getObjects(img, thres, nms, draw=True, objects=[]):
     classIds, confs, bbox = net.detect(img, confThreshold = thres, nmsThreshold = nms) 
-    #print(classIds, bbox)
     global classNames
     if len(objects) == 0:
-       objects = classNames
+        objects = classNames
     objectInfo = []
 
     if len(classIds) != 0:
@@ -55,24 +58,45 @@ def getObjects(img, thres, nms, draw=True, objects=[]):
     return img, objectInfo, confidence, Name
         
 def counting():
-    cap = cv2.VideoCapture(0)
+
+    cap = cv2.VideoCapture(0) # rasp-camera
+    # cap = cv2.VideoCapture('http://192.168.0.16:8090/?action=stream')
     cap.set(3,640)
     cap.set(4,480)
     # cap.set(10,70)
+    
     global data
+    global opt
+    
+    d_cnt = 0
+    sum_cnt = 0
     
     while True:
 
         success, img = cap.read() 
-        result, objectInfo, confidence , Name = getObjects(img, 0.45, 0.2, objects=['person']) # put the object name what you want to detect in coco names file
-        #print(objectInfo)
-        print(confidence, end=': ')
-        print(Name)
-        print(count)
+        result, objectInfo, confidence , Name = getObjects(img, 0.45, 0.2, objects=['person'])
+        print(Name,end=" ")
+        print(str(confidence) + "%")
+        print("count:"+str(count))
         now = datetime.now()
         t_h = str(now.hour)
         t_m = str(now.minute)
         t_s = str(now.second)
-        data.append((t_h + ":" + t_m + ":" + t_s,count))
+        
+        print("opt:" + str(opt))
+        if opt==1:
+            data.append((t_h + ":" + t_m + ":" + t_s,count)) # data
+        elif opt==2:
+            cur_t = t_h + ":" + t_m
+            d_cnt += 1
+            sum_cnt += count
+            if data[-1][0]!=cur_t :
+                data.append((cur_t,sum_cnt/d_cnt)) # data
+                d_cnt = 0
+                sum_cnt = 0
+        
+        if os.path.isfile("static/image/camimg.jpg"):
+            os.remove("static/image/camimg.jpg")
+        cv2.imwrite("static/image/camimg.jpg", img)
         cv2.imshow("Output", img)
         cv2.waitKey(1)
